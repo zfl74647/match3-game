@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍬 消消乐 - Match 3 Game</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --panel: #16213e;
+    --accent: #e94560;
+    --gold: #f0a500;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+  }
+
+  .stars {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+  }
+  .star {
+    position: absolute;
+    border-radius: 50%;
+    background: white;
+    animation: twinkle 3s infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.8); }
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 20px;
+  }
+
+  h1 {
+    font-size: 2.8em;
+    font-weight: 900;
+    background: linear-gradient(45deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 20px rgba(255,255,255,0.1);
+    letter-spacing: 2px;
+  }
+
+  .panel {
+    display: flex; gap: 30px; align-items: center;
+    background: rgba(22,33,62,0.9);
+    border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 15px 35px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  }
+  .stat { text-align: center; }
+  .stat-label {
+    color: #8892b0; font-size: 0.8em;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .stat-value {
+    color: #fff; font-size: 2em; font-weight: 800;
+  }
+  .stat-value.combo { color: #ffd93d; }
+  .stat-value.best { color: #f0a500; }
+
+  .board-wrapper {
+    position: relative;
+    background: rgba(22,33,62,0.95);
+    border: 3px solid rgba(255,255,255,0.15);
+    border-radius: 24px;
+    padding: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(233,69,96,0.1);
+    backdrop-filter: blur(10px);
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    gap: 4px;
+  }
+
+  .cell {
+    width: 60px; height: 60px;
+    border-radius: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.2em;
+    transition: all 0.15s ease;
+    position: relative;
+    user-select: none;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.1);
+  }
+
+  .cell:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4), 0 0 20px rgba(255,255,255,0.3);
+    z-index: 2;
+  }
+
+  .cell.selected {
+    animation: pulse 0.6s infinite;
+    box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255,255,255,0.6);
+    transform: scale(1.1);
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255,255,255,0.6); }
+    50% { box-shadow: 0 0 0 5px #fff, 0 0 30px rgba(255,255,255,0.9); }
+  }
+
+  @keyframes matchPop {
+    0% { transform: scale(1); opacity: 1; }
+    40% { transform: scale(1.6); opacity: 1; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+
+  @keyframes dropIn {
+    0% { transform: translateY(-70px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  .cell.matched { animation: matchPop 0.4s ease forwards; }
+  .cell.dropping { animation: dropIn 0.35s ease forwards; }
+
+  .gem-0 { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
+  .gem-1 { background: linear-gradient(135deg, #ffa502, #ff7f50); }
+  .gem-2 { background: linear-gradient(135deg, #ffd700, #ffd93d); }
+  .gem-3 { background: linear-gradient(135deg, #2ed573, #7bed9f); }
+  .gem-4 { background: linear-gradient(135deg, #45aaf2, #2bcbba); }
+  .gem-5 { background: linear-gradient(135deg, #a55eea, #8854d0); }
+  .gem-6 { background: linear-gradient(135deg, #ff6b81, #fc427b); }
+
+  .btn-group { display: flex; gap: 12px; }
+  .btn {
+    padding: 12px 30px;
+    border: none; border-radius: 14px;
+    font-size: 1.1em; font-weight: 700;
+    cursor: pointer;
+    color: #fff;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+  .btn-reset {
+    background: linear-gradient(135deg, #e94560, #c23152);
+    box-shadow: 0 6px 20px rgba(233,69,96,0.4);
+  }
+  .btn-hint {
+    background: linear-gradient(135deg, #4d96ff, #2b5ba7);
+    box-shadow: 0 6px 20px rgba(77,150,255,0.4);
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(1px); }
+
+  .combo-popup {
+    position: absolute;
+    pointer-events: none;
+    font-size: 1.6em; font-weight: 900;
+    animation: comboUp 0.8s ease forwards;
+    z-index: 10;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  }
+  @keyframes comboUp {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-60px) scale(1.4); }
+  }
+
+  @media (max-width: 600px) {
+    .board { grid-template-columns: repeat(8, 38px); grid-template-rows: repeat(8, 38px); gap: 3px; }
+    .cell { width: 38px; height: 38px; font-size: 1.4em; border-radius: 10px; }
+    h1 { font-size: 1.8em; }
+    .panel { padding: 10px 20px; gap: 15px; }
+    .stat-value { font-size: 1.4em; }
+    .btn { padding: 8px 18px; font-size: 0.9em; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<div class="container">
+  <h1>✨ 消消乐 ✨</h1>
+
+  <div class="panel">
+    <div class="stat">
+      <div class="stat-label">分数</div>
+      <div class="stat-value" id="score">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">连击</div>
+      <div class="stat-value combo" id="combo">x1</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">消除</div>
+      <div class="stat-value" id="cleared">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">最佳</div>
+      <div class="stat-value best" id="best">0</div>
+    </div>
+  </div>
+
+  <div class="board-wrapper" id="boardWrapper">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-hint" onclick="showHint()">💡 提示</button>
+    <button class="btn btn-reset" onclick="resetGame()">🔄 重新开始</button>
+  </div>
+</div>
+
+<script>
+const ROWS = 8;
+const COLS = 8;
+const GEM_TYPES = 7;
+const GEM_EMOJIS = ['❤️', '🍊', '⭐', '🍀', '💎', '🍇', '🌸'];
+
+let board = [];
+let selectedCell = null;
+let score = 0;
+let comboCount = 0;
+let totalCleared = 0;
+let bestScore = parseInt(localStorage.getItem('match3_best') || '0');
+let isAnimating = false;
+
+const boardEl = document.getElementById('board');
+const scoreEl = document.getElementById('score');
+const comboEl = document.getElementById('combo');
+const clearedEl = document.getElementById('cleared');
+const bestEl = document.getElementById('best');
+const boardWrapper = document.getElementById('boardWrapper');
+const starsContainer = document.getElementById('stars');
+
+function initBoard() {
+  board = [];
+  for (let r = 0; r < ROWS; r++) {
+    board[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      do {
+        board[r][c] = Math.floor(Math.random() * GEM_TYPES);
+      } while (wouldMatch(r, c));
+    }
+  }
+}
+
+function wouldMatch(r, c) {
+  const val = board[r][c];
+  if (c >= 2 && board[r][c-1] === val && board[r][c-2] === val) return true;
+  if (r >= 2 && board[r-1][c] === val && board[r-2][c] === val) return true;
+  return false;
+}
+
+function renderBoard() {
+  boardEl.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = `cell gem-${board[r][c]}`;
+      cell.textContent = GEM_EMOJIS[board[r][c]];
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      cell.addEventListener('click', () => onCellClick(r, c, cell));
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function onCellClick(r, c, cellEl) {
+  if (isAnimating) return;
+
+  if (selectedCell === null) {
+    selectedCell = { r, c, el: cellEl };
+    cellEl.classList.add('selected');
+  } else if (selectedCell.r === r && selectedCell.c === c) {
+    selectedCell.el.classList.remove('selected');
+    selectedCell = null;
+  } else if (isAdjacent(selectedCell.r, selectedCell.c, r, c)) {
+    isAnimating = true;
+    selectedCell.el.classList.remove('selected');
+    const prev = selectedCell;
+    selectedCell = null;
+    trySwap(prev.r, prev.c, r, c);
+  } else {
+    selectedCell.el.classList.remove('selected');
+    selectedCell = { r, c, el: cellEl };
+    cellEl.classList.add('selected');
+  }
+}
+
+function isAdjacent(r1, c1, r2, c2) {
+  return (Math.abs(r1 - r2) + Math.abs(c1 - c2)) === 1;
+}
+
+function trySwap(r1, c1, r2, c2) {
+  [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]];
+  renderBoard();
+  const matches = findAllMatches();
+
+  if (matches.length === 0) {
+    setTimeout(() => {
+      [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]];
+      renderBoard();
+      isAnimating = false;
+    }, 250);
+    return;
+  }
+
+  processMatches(matches);
+}
+
+function findAllMatches() {
+  const matches = [];
+  const visited = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 2; c++) {
+      const v = board[r][c];
+      if (v === board[r][c+1] && v === board[r][c+2]) {
+        let end = c + 2;
+        while (end + 1 < COLS && board[r][end+1] === v) end++;
+        for (let i = c; i <= end; i++) {
+          if (!visited[r][i]) {
+            visited[r][i] = true;
+            matches.push({ r, c: i });
+          }
+        }
+      }
+    }
+  }
+
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS - 2; r++) {
+      const v = board[r][c];
+      if (v === board[r+1][c] && v === board[r+2][c]) {
+        let end = r + 2;
+        while (end + 1 < ROWS && board[end+1][c] === v) end++;
+        for (let i = r; i <= end; i++) {
+          if (!visited[i][c]) {
+            visited[i][c] = true;
+            matches.push({ r: i, c });
+          }
+        }
+      }
+    }
+  }
+
+  return matches;
+}
+
+async function processMatches(matches) {
+  comboCount++;
+
+  const cells = boardEl.querySelectorAll('.cell');
+  const matchSet = new Set(matches.map(m => `${m.r},${m.c}`));
+
+  cells.forEach(cell => {
+    const r = +cell.dataset.row;
+    const c = +cell.dataset.col;
+    if (matchSet.has(`${r},${c}`)) {
+      cell.classList.add('matched');
+    }
+  });
+
+  const basePoints = matches.length * 10;
+  const comboMultiplier = Math.min(comboCount, 10);
+  score += basePoints * comboMultiplier;
+  totalCleared += matches.length;
+
+  if (score > bestScore) {
+    bestScore = score;
+    localStorage.setItem('match3_best', bestScore);
+  }
+
+  updateUI();
+
+  if (comboCount > 1) {
+    showComboPopup(comboCount, comboMultiplier);
+  }
+
+  await sleep(400);
+
+  for (const { r, c } of matches) {
+    board[r][c] = -1;
+  }
+
+  applyGravity();
+  refillBoard();
+  renderBoard();
+  animateDrops();
+
+  await sleep(400);
+
+  const newMatches = findAllMatches();
+  if (newMatches.length > 0) {
+    processMatches(newMatches);
+  } else {
+    comboCount = 0;
+    updateUI();
+    isAnimating = false;
+  }
+}
+
+function applyGravity() {
+  for (let c = 0; c < COLS; c++) {
+    let writePos = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (board[r][c] !== -1) {
+        board[writePos][c] = board[r][c];
+        writePos--;
+      }
+    }
+    for (let r = writePos; r >= 0; r--) {
+      board[r][c] = -1;
+    }
+  }
+}
+
+function refillBoard() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c] === -1) {
+        board[r][c] = Math.floor(Math.random() * GEM_TYPES);
+      }
+    }
+  }
+}
+
+function animateDrops() {
+  const cells = boardEl.querySelectorAll('.cell');
+  cells.forEach(cell => {
+    if (!cell.classList.contains('matched')) {
+      cell.classList.add('dropping');
+    }
+  });
+}
+
+function showHint() {
+  if (isAnimating) return;
+
+  const hint = findValidMove();
+  if (!hint) {
+    alert('没有可用的移动了，重新开始吧！');
+    return;
+  }
+
+  const cells = boardEl.querySelectorAll('.cell');
+  cells.forEach(cell => {
+    const r = +cell.dataset.row;
+    const c = +cell.dataset.col;
+    if ((r === hint.r1 && c === hint.c1) || (r === hint.r2 && c === hint.c2)) {
+      cell.classList.add('selected');
+      setTimeout(() => cell.classList.remove('selected'), 800);
+    }
+  });
+}
+
+function findValidMove() {
+  for (let r1 = 0; r1 < ROWS; r1++) {
+    for (let c1 = 0; c1 < COLS; c1++) {
+      if (c1 + 1 < COLS) {
+        swap(r1, c1, r1, c1 + 1);
+        if (findAllMatches().length > 0) {
+          swap(r1, c1, r1, c1 + 1);
+          return { r1, c1, r2: r1, c2: c1 + 1 };
+        }
+        swap(r1, c1, r1, c1 + 1);
+      }
+      if (r1 + 1 < ROWS) {
+        swap(r1, c1, r1 + 1, c1);
+        if (findAllMatches().length > 0) {
+          swap(r1, c1, r1 + 1, c1);
+          return { r1, c1, r2: r1 + 1, c2: c1 };
+        }
+        swap(r1, c1, r1 + 1, c1);
+      }
+    }
+  }
+  return null;
+}
+
+function swap(r1, c1, r2, c2) {
+  [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]];
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function showComboPopup(combo, multiplier) {
+  const popup = document.createElement('div');
+  popup.className = 'combo-popup';
+  popup.textContent = combo >= 5 ? `🔥 ${combo}x 连击!` : `${'✨'.repeat(Math.min(combo, 3))}`;
+  popup.style.color = combo >= 5 ? '#ffd700' : combo >= 3 ? '#ff6b6b' : '#fff';
+  popup.style.left = '50%';
+  popup.style.top = '40%';
+  popup.style.transform = 'translateX(-50%)';
+  boardWrapper.appendChild(popup);
+  setTimeout(() => popup.remove(), 800);
+}
+
+function updateUI() {
+  scoreEl.textContent = score;
+  comboEl.textContent = comboCount > 0 ? `x${Math.min(comboCount, 10)}` : 'x1';
+  clearedEl.textContent = totalCleared;
+  bestEl.textContent = bestScore;
+}
+
+function resetGame() {
+  if (isAnimating) return;
+  score = 0;
+  comboCount = 0;
+  totalCleared = 0;
+  selectedCell = null;
+  isAnimating = false;
+  initBoard();
+  renderBoard();
+  updateUI();
+}
+
+function createStars() {
+  for (let i = 0; i < 80; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    const size = Math.random() * 3 + 1;
+    star.style.width = `${size}px`;
+    star.style.height = `${size}px`;
+    star.style.left = `${Math.random() * 100}%`;
+    star.style.top = `${Math.random() * 100}%`;
+    star.style.animationDelay = `${Math.random() * 3}s`;
+    star.style.animationDuration = `${2 + Math.random() * 4}s`;
+    starsContainer.appendChild(star);
+  }
+}
+
+function startGame() {
+  createStars();
+  initBoard();
+  renderBoard();
+  updateUI();
+}
+
+startGame();
+</script>
+</body>
+</html>
